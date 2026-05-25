@@ -8,3 +8,4 @@ __pycache__/
 wordlists/
 output/
 reports/
+.idea/
