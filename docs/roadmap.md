@@ -188,7 +188,7 @@ Current output includes:
 Benchmark for charset extracting
 Benchmark for ascii extracting
 Benchmark for binary extracting
-Benchmark for Bitwise extracting
+Benchmark for bitwise extracting
 ```
 
 Needs cleanup:
@@ -231,7 +231,27 @@ Clean up SendPayload error messages and commit current extraction progress.
 
 ---
 
-## v0.7 — Time-based SQLi
+## v0.7 — Documentation
+
+**Status:** ⬜ Planned
+
+Goal:
+
+Document the implemented blind SQLi extraction techniques.
+
+Planned:
+
+- ⬜ Add `docs/boolean-blind.md`
+- ⬜ Document charset-based extraction
+- ⬜ Document ASCII equality extraction
+- ⬜ Document binary search extraction
+- ⬜ Document bitwise ANDing extraction
+- ⬜ Add request count comparison notes
+- ⬜ Add examples of true/false oracle behavior
+
+---
+
+## v0.8 — Time-based SQLi
 
 **Status:** ⬜ Planned
 
@@ -258,7 +278,7 @@ false -> response time <= threshold
 
 ---
 
-## v0.8 — Union-based SQLi Helper
+## v0.9 — Union-based SQLi Helper
 
 **Status:** ⬜ Planned
 
@@ -283,7 +303,7 @@ Not blind extraction, but direct visible output extraction.
 
 ---
 
-## v0.9 — Error-based SQLi
+## v0.10 — Error-based SQLi
 
 **Status:** ⬜ Planned
 
@@ -304,7 +324,7 @@ Planned:
 
 ---
 
-## v0.10 — Concurrency
+## v0.11 — Concurrency
 
 **Status:** ⬜ Planned
 
@@ -328,7 +348,7 @@ Concurrency should be implemented only after sequential extraction logic is stab
 
 ---
 
-## v0.11 — Project Structure and Interfaces
+## v0.12 — Project Structure and Interfaces
 
 **Status:** ⬜ Planned
 
@@ -363,37 +383,6 @@ sqli-oracle-trainer/
 ├── lab/
 ├── docs/
 └── README.md
-```
-
----
-
-## v0.12 — dbexec Transition
-
-**Status:** ⬜ Planned
-
-Goal:
-
-Use the patterns learned in this project to prepare for `dbexec`.
-
-Concepts to transfer:
-
-- HTTP/client abstraction
-- result models
-- oracle interfaces
-- payload builders
-- extraction engine
-- concurrency control
-- clean project structure
-- error handling
-- reporting
-
-Related future `dbexec` concept:
-
-```go
-type Provider interface {
-	Name() string
-	Check(ctx context.Context, target Target, cred Credential) Result
-}
 ```
 
 ---
