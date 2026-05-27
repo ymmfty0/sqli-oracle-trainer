@@ -31,7 +31,7 @@ Current oracle marker:
 Product found
 ```
 
-Current true/false examples:
+Current true/false payloads:
 
 ```sql
 1' AND 1=1-- -
@@ -42,19 +42,19 @@ Current true/false examples:
 
 ## v0.2 — Boolean Blind Extraction
 
-**Status:** 🟡 In progress
+**Status:** ✅ Done
 
 Implemented:
 
 - ✅ Charset constants:
-    - lowercase
-    - uppercase
-    - digits
-    - symbols
-    - default charset
+  - lowercase
+  - uppercase
+  - digits
+  - symbols
+  - default charset
 - ✅ ASCII range constants:
-    - `ASCIIMin = 32`
-    - `ASCIIMax = 126`
+  - `ASCIIMin = 32`
+  - `ASCIIMax = 126`
 - ✅ Character equality payload builder
 - ✅ ASCII equality payload builder
 - ✅ Charset-based extraction loop
@@ -63,63 +63,175 @@ Implemented:
 - ✅ Stop extraction when no character is found
 - ✅ Extraction functions return `(string, error)`
 
-Current extraction methods:
+Implemented extraction methods:
 
 ```go
 ExtractByCharset(maxLen, charset)
 ExtractByASCII(maxLen, minCode, maxCode)
 ```
 
-Needs cleanup:
+Notes:
 
-- 🟡 Improve error messages in `SendPayload`
-- 🟡 Rename unclear error contexts:
-    - `send request` during request creation
-    - `create new request` during `client.Do`
-    - `read resp erro`
-- 🟡 Move oracle marker into a constant
-- 🟡 Remove hardcoded `maxLen = 21` from `main`
-- 🟡 Add comments/docs for charset vs ASCII extraction
-
-Planned:
-
-- ⬜ CLI flags:
-    - target URL
-    - max length
-    - charset mode
-    - extraction mode
-- ⬜ JSON output for extracted result
+- Charset extraction checks characters directly.
+- ASCII equality extraction checks numeric character codes.
+- Both methods use the same body-based oracle.
 
 ---
 
-## v0.3 — Blind ANDing / ASCII Comparison
+## v0.3 — Binary Search Blind Extraction
 
-**Status:** ⬜ Planned
+**Status:** ✅ Done
 
 Goal:
 
 Use comparison-based blind checks instead of direct equality checks.
 
-Planned:
+Implemented:
 
-- ⬜ Payload builder for ASCII greater-than checks
-- ⬜ Manual test for `unicode(substr(...)) > N`
-- ⬜ Binary search for one character
-- ⬜ Binary search for full string extraction
-- ⬜ Compare request count between:
-    - charset brute-force
-    - ASCII equality
-    - ASCII binary search
+- ✅ ASCII greater-than payload builder
+- ✅ Binary search extraction loop
+- ✅ Full string extraction via binary search
+- ✅ Per-character range reset with `low` / `high`
+- ✅ Basic benchmark timing for binary extraction
 
-Expected benefit:
+Implemented method:
+
+```go
+ExtractViaBinarySearch(maxLen, minCode, maxCode)
+```
+
+Payload idea:
+
+```sql
+1' AND unicode(SUBSTR((SELECT value FROM secrets LIMIT 1),1,1))>100-- -
+```
+
+Notes:
+
+- Binary search asks: `ASCII(position) > mid?`
+- This reduces the number of requests compared to equality-based brute force.
+- Current implementation still uses a fixed `maxLen`.
+
+Needs improvement later:
+
+- 🔁 Add length detection instead of hardcoded `maxLen`
+- 🔁 Add cleaner output mode
+- 🔁 Add request counter for benchmark comparison
+
+---
+
+## v0.4 — Bitwise ANDing Blind Extraction
+
+**Status:** ✅ Done
+
+Goal:
+
+Extract characters by reconstructing their ASCII code from individual bits.
+
+Implemented:
+
+- ✅ Bitwise payload builder
+- ✅ Bit masks:
+  - `1`
+  - `2`
+  - `4`
+  - `8`
+  - `16`
+  - `32`
+  - `64`
+- ✅ Bitwise extraction loop
+- ✅ ASCII code reconstruction with bitwise OR
+- ✅ Stop condition when reconstructed code is outside configured ASCII range
+- ✅ Basic benchmark timing for bitwise extraction
+
+Implemented method:
+
+```go
+ExtractViaBitwise(maxLen, minCode, maxCode)
+```
+
+Payload idea:
+
+```sql
+1' AND (unicode(SUBSTR((SELECT value FROM secrets LIMIT 1),1,1)) & 64)>0-- -
+```
+
+Notes:
+
+- Bitwise extraction asks: `is this bit enabled?`
+- For printable ASCII, 7 masks are enough for current lab usage.
+- Current implementation uses `code |= mask` to reconstruct the character.
+
+Needs improvement later:
+
+- 🔁 Move masks into a constant or config
+- 🔁 Add request counter
+- 🔁 Add docs explaining bitwise extraction step by step
+
+---
+
+## v0.5 — Benchmark / Comparison Output
+
+**Status:** 🟡 In progress
+
+Implemented:
+
+- ✅ Basic timing measurement for:
+  - charset extraction
+  - ASCII equality extraction
+  - binary search extraction
+  - bitwise extraction
+
+Current output includes:
 
 ```text
-Fewer requests during blind extraction.
+Benchmark for charset extracting
+Benchmark for ascii extracting
+Benchmark for binary extracting
+Benchmark for Bitwise extracting
+```
+
+Needs cleanup:
+
+- 🟡 Normalize benchmark output names
+- 🟡 Add request count per extraction method
+- 🟡 Add summary table
+- 🟡 Move benchmark logic out of `main`
+- 🟡 Add optional verbose output
+
+---
+
+## v0.6 — Code Cleanup
+
+**Status:** 🟡 In progress
+
+Needs cleanup:
+
+- 🟡 Improve error messages in `SendPayload`
+- 🟡 Rename unclear error contexts:
+  - `send request` during request creation
+  - `create new request` during `client.Do`
+  - `read resp erro`
+- 🟡 Move oracle marker into a constant
+- 🟡 Remove hardcoded secret length from `main`
+- 🟡 Add helper for repeated extraction execution
+- 🟡 Reduce noisy output from extraction functions
+- 🟡 Add CLI flags later:
+  - target URL
+  - max length
+  - extraction mode
+  - charset
+  - timeout
+
+Immediate cleanup task:
+
+```text
+Clean up SendPayload error messages and commit current extraction progress.
 ```
 
 ---
 
-## v0.4 — Time-based SQLi
+## v0.7 — Time-based SQLi
 
 **Status:** ⬜ Planned
 
@@ -146,7 +258,7 @@ false -> response time <= threshold
 
 ---
 
-## v0.5 — Union-based SQLi Helper
+## v0.8 — Union-based SQLi Helper
 
 **Status:** ⬜ Planned
 
@@ -171,7 +283,7 @@ Not blind extraction, but direct visible output extraction.
 
 ---
 
-## v0.6 — Error-based SQLi
+## v0.9 — Error-based SQLi
 
 **Status:** ⬜ Planned
 
@@ -186,19 +298,19 @@ Planned:
 - ⬜ Status-code oracle
 - ⬜ Body-based error oracle
 - ⬜ Error marker detection:
-    - `SQL error`
-    - `syntax error`
-    - `database error`
+  - `SQL error`
+  - `syntax error`
+  - `database error`
 
 ---
 
-## v0.7 — Concurrency
+## v0.10 — Concurrency
 
 **Status:** ⬜ Planned
 
 Goal:
 
-Speed up boolean extraction using goroutines.
+Speed up blind extraction using goroutines.
 
 Planned:
 
@@ -212,11 +324,11 @@ Planned:
 
 Notes:
 
-Concurrency should be implemented after the sequential extraction logic is stable.
+Concurrency should be implemented only after sequential extraction logic is stable and cleaned up.
 
 ---
 
-## v0.8 — Project Structure and Interfaces
+## v0.11 — Project Structure and Interfaces
 
 **Status:** ⬜ Planned
 
@@ -255,7 +367,7 @@ sqli-oracle-trainer/
 
 ---
 
-## v0.9 — dbexec Transition
+## v0.12 — dbexec Transition
 
 **Status:** ⬜ Planned
 
@@ -291,13 +403,17 @@ type Provider interface {
 Current version:
 
 ```text
-v0.2 — Boolean Blind Extraction
+v0.6 — Code Cleanup
 ```
 
 Immediate tasks:
 
 - 🟡 Clean up `SendPayload` error messages
-- 🟡 Run charset extraction
-- 🟡 Run ASCII extraction
-- 🟡 Commit current progress
-- ⬜ Start v0.3: ASCII greater-than payload builder
+- 🟡 Run all extraction methods again
+- 🟡 Verify benchmark output
+- 🟡 Commit current extraction progress
+- ⬜ Add docs for:
+  - charset extraction
+  - ASCII equality
+  - binary search
+  - bitwise ANDing

