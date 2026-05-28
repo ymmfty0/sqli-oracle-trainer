@@ -2,10 +2,10 @@
 
 ## Status legend
 
-- ✅ Done
-- 🟡 In progress
-- ⬜ Planned
-- 🔁 Refactor later
+* ✅ Done
+* 🟡 In progress
+* ⬜ Planned
+* 🔁 Refactor later
 
 ---
 
@@ -15,15 +15,15 @@
 
 Implemented:
 
-- ✅ Flask lab with vulnerable `/boolean?id=...`
-- ✅ Go HTTP client
-- ✅ URL validation
-- ✅ HTTP timeout configuration
-- ✅ `Observation` struct
-- ✅ Body contains oracle
-- ✅ Manual true/false payload checks
-- ✅ Loop over true/false payloads
-- ✅ Query parameters via `url.Values`
+* ✅ Flask lab with vulnerable `/boolean?id=...`
+* ✅ Go HTTP client
+* ✅ URL validation
+* ✅ HTTP timeout configuration
+* ✅ `Observation` struct
+* ✅ Body contains oracle
+* ✅ Manual true/false payload checks
+* ✅ Loop over true/false payloads
+* ✅ Query parameters via `url.Values`
 
 Current oracle marker:
 
@@ -46,22 +46,31 @@ Current true/false payloads:
 
 Implemented:
 
-- ✅ Charset constants:
-  - lowercase
-  - uppercase
-  - digits
-  - symbols
-  - default charset
-- ✅ ASCII range constants:
-  - `ASCIIMin = 32`
-  - `ASCIIMax = 126`
-- ✅ Character equality payload builder
-- ✅ ASCII equality payload builder
-- ✅ Charset-based extraction loop
-- ✅ ASCII equality extraction loop
-- ✅ Extraction result building with `strings.Builder`
-- ✅ Stop extraction when no character is found
-- ✅ Extraction functions return `(string, error)`
+* ✅ Charset constants:
+
+  * lowercase
+  * uppercase
+  * digits
+  * symbols
+  * default charset
+* ✅ Added special characters required by the lab secret
+
+  * `{`
+  * `}`
+  * `_`
+  * `-`
+  * `$`
+* ✅ ASCII range constants:
+
+  * `ASCIIMin = 32`
+  * `ASCIIMax = 126`
+* ✅ Character equality payload builder
+* ✅ ASCII equality payload builder
+* ✅ Charset-based extraction loop
+* ✅ ASCII equality extraction loop
+* ✅ Extraction result building with `strings.Builder`
+* ✅ Stop extraction when no character is found
+* ✅ Extraction functions return `(string, error)`
 
 Implemented extraction methods:
 
@@ -72,9 +81,11 @@ ExtractByASCII(maxLen, minCode, maxCode)
 
 Notes:
 
-- Charset extraction checks characters directly.
-- ASCII equality extraction checks numeric character codes.
-- Both methods use the same body-based oracle.
+* Charset extraction checks characters directly.
+* ASCII equality extraction checks numeric character codes.
+* Charset extraction depends on the quality of the configured charset.
+* If a required character is missing from the charset, extraction stops early.
+* Both methods use the same body-based oracle.
 
 ---
 
@@ -88,11 +99,12 @@ Use comparison-based blind checks instead of direct equality checks.
 
 Implemented:
 
-- ✅ ASCII greater-than payload builder
-- ✅ Binary search extraction loop
-- ✅ Full string extraction via binary search
-- ✅ Per-character range reset with `low` / `high`
-- ✅ Basic benchmark timing for binary extraction
+* ✅ ASCII greater-than payload builder
+* ✅ Binary search extraction loop
+* ✅ Full string extraction via binary search
+* ✅ Per-character range reset with `low` / `high`
+* ✅ Basic benchmark timing for binary extraction
+* ✅ Request count measurement for binary extraction
 
 Implemented method:
 
@@ -108,15 +120,15 @@ Payload idea:
 
 Notes:
 
-- Binary search asks: `ASCII(position) > mid?`
-- This reduces the number of requests compared to equality-based brute force.
-- Current implementation still uses a fixed `maxLen`.
+* Binary search asks: `ASCII(position) > mid?`
+* This reduces the number of requests compared to equality-based brute force.
+* Current implementation still uses a fixed `maxLen`.
 
 Needs improvement later:
 
-- 🔁 Add length detection instead of hardcoded `maxLen`
-- 🔁 Add cleaner output mode
-- 🔁 Add request counter for benchmark comparison
+* 🔁 Add length detection instead of hardcoded `maxLen`
+* 🔁 Add cleaner output mode
+* 🔁 Add optional verbose mode
 
 ---
 
@@ -130,19 +142,21 @@ Extract characters by reconstructing their ASCII code from individual bits.
 
 Implemented:
 
-- ✅ Bitwise payload builder
-- ✅ Bit masks:
-  - `1`
-  - `2`
-  - `4`
-  - `8`
-  - `16`
-  - `32`
-  - `64`
-- ✅ Bitwise extraction loop
-- ✅ ASCII code reconstruction with bitwise OR
-- ✅ Stop condition when reconstructed code is outside configured ASCII range
-- ✅ Basic benchmark timing for bitwise extraction
+* ✅ Bitwise payload builder
+* ✅ Bit masks:
+
+  * `1`
+  * `2`
+  * `4`
+  * `8`
+  * `16`
+  * `32`
+  * `64`
+* ✅ Bitwise extraction loop
+* ✅ ASCII code reconstruction with bitwise OR
+* ✅ Stop condition when reconstructed code is outside configured ASCII range
+* ✅ Basic benchmark timing for bitwise extraction
+* ✅ Request count measurement for bitwise extraction
 
 Implemented method:
 
@@ -158,46 +172,75 @@ Payload idea:
 
 Notes:
 
-- Bitwise extraction asks: `is this bit enabled?`
-- For printable ASCII, 7 masks are enough for current lab usage.
-- Current implementation uses `code |= mask` to reconstruct the character.
+* Bitwise extraction asks: `is this bit enabled?`
+* For printable ASCII, 7 masks are enough for current lab usage.
+* Current implementation uses `code |= mask` to reconstruct the character.
 
 Needs improvement later:
 
-- 🔁 Move masks into a constant or config
-- 🔁 Add request counter
-- 🔁 Add docs explaining bitwise extraction step by step
+* 🔁 Move masks into a constant or config
+* 🔁 Add docs explaining bitwise extraction step by step
+* 🔁 Add optional verbose mode
 
 ---
 
 ## v0.5 — Benchmark / Comparison Output
 
-**Status:** 🟡 In progress
+**Status:** ✅ Done
+
+Goal:
+
+Compare implemented blind extraction methods by elapsed time and number of oracle requests.
 
 Implemented:
 
-- ✅ Basic timing measurement for:
-  - charset extraction
-  - ASCII equality extraction
-  - binary search extraction
-  - bitwise extraction
+* ✅ Basic timing measurement for:
 
-Current output includes:
+  * charset extraction
+  * ASCII equality extraction
+  * binary search extraction
+  * bitwise extraction
+* ✅ Request counter in `HTTPClient`
+* ✅ Request counter reset before each extraction method
+* ✅ Request count output for each extraction method
+* ✅ Separate benchmark output for:
+
+  * elapsed time
+  * request count
+  * extracted secret
+
+Current benchmark output includes:
 
 ```text
-Benchmark for charset extracting
-Benchmark for ascii extracting
-Benchmark for binary extracting
-Benchmark for bitwise extracting
+Charset extracted secret
+Charset elapsed
+Charset requests
+
+ASCII extracted secret
+ASCII elapsed
+ASCII requests
+
+Binary extracted secret
+Binary elapsed
+Binary requests
+
+Bitwise extracted secret
+Bitwise elapsed
+Bitwise requests
 ```
 
-Needs cleanup:
+Notes:
 
-- 🟡 Normalize benchmark output names
-- 🟡 Add request count per extraction method
-- 🟡 Add summary table
-- 🟡 Move benchmark logic out of `main`
-- 🟡 Add optional verbose output
+* ASCII equality usually makes the most requests.
+* Binary search and bitwise extraction are significantly more efficient.
+* Charset extraction performance depends heavily on charset ordering and coverage.
+
+Needs improvement later:
+
+* 🔁 Normalize benchmark output names
+* 🔁 Add a compact summary table
+* 🔁 Move benchmark logic out of `main`
+* 🔁 Add optional verbose output
 
 ---
 
@@ -207,21 +250,23 @@ Needs cleanup:
 
 Needs cleanup:
 
-- 🟡 Improve error messages in `SendPayload`
-- 🟡 Rename unclear error contexts:
-  - `send request` during request creation
-  - `create new request` during `client.Do`
-  - `read resp erro`
-- 🟡 Move oracle marker into a constant
-- 🟡 Remove hardcoded secret length from `main`
-- 🟡 Add helper for repeated extraction execution
-- 🟡 Reduce noisy output from extraction functions
-- 🟡 Add CLI flags later:
-  - target URL
-  - max length
-  - extraction mode
-  - charset
-  - timeout
+* 🟡 Improve error messages in `SendPayload`
+* 🟡 Rename unclear error contexts:
+
+  * `create new request` should become `create request`
+  * `request timeout` should use consistent formatting
+  * `send request` should use consistent formatting
+* 🟡 Move oracle marker into a constant
+* 🟡 Move repeated max length value into a variable or config
+* 🟡 Add helper for repeated extraction execution
+* 🟡 Reduce noisy output from extraction functions
+* 🟡 Add CLI flags later:
+
+  * target URL
+  * max length
+  * extraction mode
+  * charset
+  * timeout
 
 Immediate cleanup task:
 
@@ -241,13 +286,14 @@ Document the implemented blind SQLi extraction techniques.
 
 Planned:
 
-- ⬜ Add `docs/boolean-blind.md`
-- ⬜ Document charset-based extraction
-- ⬜ Document ASCII equality extraction
-- ⬜ Document binary search extraction
-- ⬜ Document bitwise ANDing extraction
-- ⬜ Add request count comparison notes
-- ⬜ Add examples of true/false oracle behavior
+* ⬜ Add `docs/boolean-blind.md`
+* ⬜ Document charset-based extraction
+* ⬜ Document ASCII equality extraction
+* ⬜ Document binary search extraction
+* ⬜ Document bitwise ANDing extraction
+* ⬜ Add request count comparison notes
+* ⬜ Add examples of true/false oracle behavior
+* ⬜ Add notes about charset completeness and extraction failures
 
 ---
 
@@ -261,13 +307,13 @@ Implement time-based blind SQLi extraction using response delay as oracle.
 
 Planned:
 
-- ⬜ Add `/time?id=...` lab endpoint
-- ⬜ Add time-based true/false payloads
-- ⬜ Add timing oracle using `Observation.Elapsed`
-- ⬜ Add threshold configuration
-- ⬜ Add baseline timing measurement
-- ⬜ Add time-based extraction loop
-- ⬜ Add notes about jitter, false positives and retries
+* ⬜ Add `/time?id=...` lab endpoint
+* ⬜ Add time-based true/false payloads
+* ⬜ Add timing oracle using `Observation.Elapsed`
+* ⬜ Add threshold configuration
+* ⬜ Add baseline timing measurement
+* ⬜ Add time-based extraction loop
+* ⬜ Add notes about jitter, false positives and retries
 
 Oracle model:
 
@@ -288,12 +334,12 @@ Implement helpers for visible-output SQLi exploitation.
 
 Planned:
 
-- ⬜ Add `/union?id=...` lab endpoint
-- ⬜ Column count checks
-- ⬜ `ORDER BY` helper
-- ⬜ `UNION SELECT NULL,...` helper
-- ⬜ Marker-based response detection
-- ⬜ Basic data extraction via UNION
+* ⬜ Add `/union?id=...` lab endpoint
+* ⬜ Column count checks
+* ⬜ `ORDER BY` helper
+* ⬜ `UNION SELECT NULL,...` helper
+* ⬜ Marker-based response detection
+* ⬜ Basic data extraction via UNION
 
 Focus:
 
@@ -313,14 +359,15 @@ Detect SQL injection behavior using SQL errors and HTTP status codes.
 
 Planned:
 
-- ⬜ Add `/error?id=...` lab endpoint
-- ⬜ SQL error detection
-- ⬜ Status-code oracle
-- ⬜ Body-based error oracle
-- ⬜ Error marker detection:
-  - `SQL error`
-  - `syntax error`
-  - `database error`
+* ⬜ Add `/error?id=...` lab endpoint
+* ⬜ SQL error detection
+* ⬜ Status-code oracle
+* ⬜ Body-based error oracle
+* ⬜ Error marker detection:
+
+  * `SQL error`
+  * `syntax error`
+  * `database error`
 
 ---
 
@@ -334,13 +381,13 @@ Speed up blind extraction using goroutines.
 
 Planned:
 
-- ⬜ Goroutines for boolean charset extraction
-- ⬜ Worker pool
-- ⬜ Max concurrency setting
-- ⬜ Context cancellation
-- ⬜ Stop workers after first true match
-- ⬜ Rate limiting
-- ⬜ Compare sequential vs parallel extraction
+* ⬜ Goroutines for boolean charset extraction
+* ⬜ Worker pool
+* ⬜ Max concurrency setting
+* ⬜ Context cancellation
+* ⬜ Stop workers after first true match
+* ⬜ Rate limiting
+* ⬜ Compare sequential vs parallel extraction
 
 Notes:
 
@@ -358,14 +405,14 @@ Refactor the project into reusable packages and introduce interfaces naturally.
 
 Planned:
 
-- ⬜ Split project into packages
-- ⬜ Move `Observation` into model package
-- ⬜ Move HTTP client into client package
-- ⬜ Add `Oracle` interface
-- ⬜ Add `PayloadBuilder` interface
-- ⬜ Add extractor package
-- ⬜ Add output package
-- ⬜ Add JSON report output
+* ⬜ Split project into packages
+* ⬜ Move `Observation` into model package
+* ⬜ Move HTTP client into client package
+* ⬜ Add `Oracle` interface
+* ⬜ Add `PayloadBuilder` interface
+* ⬜ Add extractor package
+* ⬜ Add output package
+* ⬜ Add JSON report output
 
 Potential structure:
 
@@ -397,12 +444,16 @@ v0.6 — Code Cleanup
 
 Immediate tasks:
 
-- 🟡 Clean up `SendPayload` error messages
-- 🟡 Run all extraction methods again
-- 🟡 Verify benchmark output
-- 🟡 Commit current extraction progress
-- ⬜ Add docs for:
-  - charset extraction
-  - ASCII equality
-  - binary search
-  - bitwise ANDing
+* 🟡 Clean up `SendPayload` error messages
+* 🟡 Run all extraction methods again
+* 🟡 Verify benchmark output
+* 🟡 Commit current extraction progress
+* ⬜ Add docs for:
+
+  * charset extraction
+  * ASCII equality
+  * binary search
+  * bitwise ANDing
+
+```
+```

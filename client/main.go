@@ -16,7 +16,7 @@ const (
 	Lowercase = "abcdefghijklmnopqrstuvwxyz"
 	Uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	Digits    = "0123456789"
-	Symbols   = "{}_-"
+	Symbols   = "{}_-$"
 
 	DefaultCharset = Lowercase + Uppercase + Digits + Symbols
 )
@@ -27,9 +27,10 @@ const (
 )
 
 type HTTPClient struct {
-	BaseURL string
-	Client  *http.Client
-	Timeout time.Duration
+	BaseURL      string
+	Client       *http.Client
+	Timeout      time.Duration
+	RequestCount int
 }
 
 type Observation struct {
@@ -78,6 +79,14 @@ func NewHTTPClient(baseURL string, timeOut time.Duration) (HTTPClient, error) {
 	}, nil
 }
 
+func (c *HTTPClient) ResetRequestCount() {
+	c.RequestCount = 0
+}
+
+func (c *HTTPClient) GetRequestCount() int {
+	return c.RequestCount
+}
+
 func (c *HTTPClient) SendPayload(payload string) (Observation, error) {
 	startTime := time.Now()
 
@@ -88,8 +97,10 @@ func (c *HTTPClient) SendPayload(payload string) (Observation, error) {
 
 	req, err := http.NewRequest(http.MethodGet, targetURL, nil)
 	if err != nil {
-		return Observation{}, fmt.Errorf("create new request %w", err)
+		return Observation{}, fmt.Errorf("create request %w", err)
 	}
+
+	c.RequestCount++
 
 	resp, err := c.Client.Do(req)
 	if err != nil {
@@ -369,48 +380,69 @@ func main() {
 		fmt.Println()
 	}
 
+	client.ResetRequestCount()
 	timeStartCharset := time.Now()
-	charsetSecret, err := client.ExtractByCharset(21, DefaultCharset)
+	charsetSecret, err := client.ExtractByCharset(46, DefaultCharset)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	elapsedCharset := time.Since(timeStartCharset)
+	charsetRequestCount := client.GetRequestCount()
 
-	fmt.Println("Charset extracted secret:", charsetSecret)
-
+	client.ResetRequestCount()
 	timeStartAscii := time.Now()
-	asciiSecret, err := client.ExtractByASCII(21, ASCIIMin, ASCIIMax)
+	asciiSecret, err := client.ExtractByASCII(46, ASCIIMin, ASCIIMax)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	elapsedAscii := time.Since(timeStartAscii)
+	asciiRequestCount := client.GetRequestCount()
 
-	fmt.Println("ASCII extracted secret:", asciiSecret)
-
+	client.ResetRequestCount()
 	timeStartBinary := time.Now()
-	binarySecret, err := client.ExtractViaBinarySearch(21, ASCIIMin, ASCIIMax)
+	binarySecret, err := client.ExtractViaBinarySearch(46, ASCIIMin, ASCIIMax)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	elapsedBinary := time.Since(timeStartBinary)
-	fmt.Println("ASCII binary search extracted secret:", binarySecret)
+	binaryRequestCount := client.GetRequestCount()
 
+	client.ResetRequestCount()
 	timeStartBitwise := time.Now()
-	bitwiseSecret, err := client.ExtractViaBitwise(21, ASCIIMin, ASCIIMax)
+	bitwiseSecret, err := client.ExtractViaBitwise(46, ASCIIMin, ASCIIMax)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	elapsedBitwise := time.Since(timeStartBitwise)
-	fmt.Println("Bitwise search extracted secret:", bitwiseSecret)
+	bitwiseRequestCount := client.GetRequestCount()
 
 	fmt.Println()
 
-	fmt.Println("Benchmark for charset extracting:", elapsedCharset)
-	fmt.Println("Benchmark for ascii extracting:", elapsedAscii)
-	fmt.Println("Benchmark for binary extracting:", elapsedBinary)
-	fmt.Println("Benchmark for Bitwise extracting:", elapsedBitwise)
+	fmt.Println("Charset extracted secret:", charsetSecret)
+	fmt.Println("Charset elapsed:", elapsedCharset)
+	fmt.Println("Charset requests:", charsetRequestCount)
+
+	fmt.Println()
+
+	fmt.Println("ASCII extracted secret:", asciiSecret)
+	fmt.Println("ASCII elapsed:", elapsedAscii)
+	fmt.Println("ASCII requests:", asciiRequestCount)
+
+	fmt.Println()
+
+	fmt.Println("Binary extracted secret:", binarySecret)
+	fmt.Println("Binary elapsed:", elapsedBinary)
+	fmt.Println("Binary requests:", binaryRequestCount)
+
+	fmt.Println()
+
+	fmt.Println("Bitwise extracted secret:", bitwiseSecret)
+	fmt.Println("Bitwise elapsed:", elapsedBitwise)
+	fmt.Println("Bitwise requests:", bitwiseRequestCount)
+
+	fmt.Println()
 }
