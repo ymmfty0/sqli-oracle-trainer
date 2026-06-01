@@ -25,7 +25,7 @@ def get_db():
 
     conn.execute("INSERT INTO products (id, name, price) VALUES (1, 'Laptop', 1000)")
     conn.execute("INSERT INTO products (id, name, price) VALUES (2, 'Mouse', 50)")
-    conn.execute("INSERT INTO secrets (id, value) VALUES (1, 'flag{training_secret}')")
+    conn.execute("INSERT INTO secrets (id, value) VALUES (1, 'flag{tr4ining_$3cr3T_fl4g_v3r4_l0ng_t0_ext4ct}')")
 
     return conn
 
