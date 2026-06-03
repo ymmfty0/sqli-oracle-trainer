@@ -110,7 +110,7 @@ func (c *HTTPClient) ExtractSecret(maxLen int, minCode int, maxCode int) string 
 				obs, err := c.SendPayload(payload)
 				if err != nil {
 					fmt.Fprintln(os.Stderr, "request error:", err)
-					os.Exit(1)
+					return
 				}
 
 				ok := bodyContainsOracle(obs, "Product found")
